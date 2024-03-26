@@ -1,6 +1,11 @@
 {
 	"name": "maxdev_unity_ext_storage",
 	"properties": {
+		"parameters": {
+			"p_run_date": {
+				"type": "string"
+			}
+		},
 		"annotations": [],
 		"type": "AzureBlobFS",
 		"typeProperties": {
