@@ -1,0 +1,15 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"value": "maxdev00adf00unity"
+		},
+		"ErgastAPI_F1_properties_typeProperties_url": {
+			"value": "https://ergast.com/api/f1/2021/1/results.json"
+		},
+		"maxdev_unity_ext_storage_properties_typeProperties_url": {
+			"value": "https://maxdev0unity0extstorage.dfs.core.windows.net/"
+		}
+	}
+}

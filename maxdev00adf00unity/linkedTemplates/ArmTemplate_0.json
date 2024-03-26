@@ -1,0 +1,443 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name",
+			"defaultValue": "maxdev00adf00unity"
+		},
+		"ErgastAPI_F1_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://ergast.com/api/f1/2021/1/results.json"
+		},
+		"maxdev_unity_ext_storage_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://maxdev0unity0extstorage.dfs.core.windows.net/"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/ErgastAPI_F1')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "RestService",
+				"typeProperties": {
+					"url": "[parameters('ErgastAPI_F1_properties_typeProperties_url')]",
+					"enableServerCertificateValidation": true,
+					"authenticationType": "Anonymous"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/maxdev_unity_ext_storage')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('maxdev_unity_ext_storage_properties_typeProperties_url')]"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/RaceResult')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "maxdev_unity_ext_storage",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"p_race_date": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": "race_results",
+						"folderPath": {
+							"value": "@dataset().p_race_date",
+							"type": "Expression"
+						},
+						"fileSystem": "bronze"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/maxdev_unity_ext_storage')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/RestResource1')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ErgastAPI_F1",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "RestResource",
+				"typeProperties": {},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ErgastAPI_F1')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Ergast API raceResults')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Read File Date",
+						"type": "WebActivity",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"method": "GET",
+							"headers": {},
+							"linkedServices": [
+								{
+									"referenceName": "ErgastAPI_F1",
+									"type": "LinkedServiceReference"
+								}
+							],
+							"datasets": [
+								{
+									"referenceName": "RestResource1",
+									"type": "DatasetReference",
+									"parameters": {}
+								}
+							],
+							"url": "https://ergast.com/api/f1/2021/1/results.json"
+						}
+					},
+					{
+						"name": "Get File Date",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Read File Date",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "v_row_count",
+							"value": {
+								"value": "@activity('Read File Date').output['MRData']['total']",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Data Movement",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Get File Date",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "RestSource",
+								"httpRequestTimeout": "00:01:40",
+								"requestInterval": "00.00:00:00.010",
+								"requestMethod": "GET",
+								"paginationRules": {
+									"supportRFC5988": "true"
+								}
+							},
+							"sink": {
+								"type": "JsonSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "JsonWriteSettings"
+								}
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"mappings": [
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['number']"
+										},
+										"sink": {
+											"path": "number"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['position']"
+										},
+										"sink": {
+											"path": "position"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['positionText']"
+										},
+										"sink": {
+											"path": "positionText"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['points']"
+										},
+										"sink": {
+											"path": "points"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['Driver']['driverId']"
+										},
+										"sink": {
+											"path": "driverId"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['Driver']['permanentNumber']"
+										},
+										"sink": {
+											"path": "permanentNumber"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['Driver']['code']"
+										},
+										"sink": {
+											"path": "code"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['Driver']['givenName']"
+										},
+										"sink": {
+											"path": "first_name"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['Driver']['familyName']"
+										},
+										"sink": {
+											"path": "surname"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['Driver']['dateOfBirth']"
+										},
+										"sink": {
+											"path": "dob"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['Driver']['nationality']"
+										},
+										"sink": {
+											"path": "nationality"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['Constructor']['constructorId']"
+										},
+										"sink": {
+											"path": "constructorId"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['Constructor']['name']"
+										},
+										"sink": {
+											"path": "constructor_name"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['Constructor']['nationality']"
+										},
+										"sink": {
+											"path": "constructor_nationality"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['grid']"
+										},
+										"sink": {
+											"path": "grid"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['laps']"
+										},
+										"sink": {
+											"path": "laps"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['status']"
+										},
+										"sink": {
+											"path": "status"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['Time']['millis']"
+										},
+										"sink": {
+											"path": "$['Time']['millis']"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['Time']['time']"
+										},
+										"sink": {
+											"path": "$['Time']['time']"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['FastestLap']['rank']"
+										},
+										"sink": {
+											"path": "$['FastestLap']['rank']"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['FastestLap']['lap']"
+										},
+										"sink": {
+											"path": "$['FastestLap']['lap']"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['FastestLap']['Time']['time']"
+										},
+										"sink": {
+											"path": "$['FastestLap']['Time']['time']"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['FastestLap']['AverageSpeed']['units']"
+										},
+										"sink": {
+											"path": "$['AverageSpeed']['units']"
+										}
+									},
+									{
+										"source": {
+											"path": "$['MRData']['RaceTable']['Races'][0]['Results'][0]['FastestLap']['AverageSpeed']['speed']"
+										},
+										"sink": {
+											"path": "$['AverageSpeed']['speed']"
+										}
+									}
+								],
+								"collectionReference": "$['MRData']['RaceTable']['Races'][0]['Results'][0]"
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "RestResource1",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "RaceResult",
+								"type": "DatasetReference",
+								"parameters": {
+									"p_race_date": {
+										"value": "@variables('v_race_date')",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					}
+				],
+				"concurrency": 1,
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"variables": {
+					"v_race_date": {
+						"type": "String"
+					},
+					"v_row_count": {
+						"type": "Integer"
+					}
+				},
+				"annotations": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ErgastAPI_F1')]",
+				"[concat(variables('factoryId'), '/datasets/RestResource1')]",
+				"[concat(variables('factoryId'), '/datasets/RaceResult')]"
+			]
+		}
+	]
+}
