@@ -1,0 +1,10 @@
+{
+	"name": "maxdev_unity_ext_storage",
+	"properties": {
+		"annotations": [],
+		"type": "AzureBlobFS",
+		"typeProperties": {
+			"url": "https://maxdev0unity0extstorage.dfs.core.windows.net/"
+		}
+	}
+}
