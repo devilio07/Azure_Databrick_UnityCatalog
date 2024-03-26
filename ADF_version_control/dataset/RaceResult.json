@@ -1,0 +1,28 @@
+{
+	"name": "RaceResult",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "maxdev_unity_ext_storage",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"p_race_date": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"type": "Json",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"fileName": "race_results",
+				"folderPath": {
+					"value": "@dataset().p_race_date",
+					"type": "Expression"
+				},
+				"fileSystem": "bronze"
+			}
+		},
+		"schema": {}
+	}
+}
