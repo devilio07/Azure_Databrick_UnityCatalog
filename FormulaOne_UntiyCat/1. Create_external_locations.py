@@ -32,9 +32,4 @@
 # COMMAND ----------
 
 # MAGIC %fs
-# MAGIC
 # MAGIC ls 'abfss://bronze@maxdev0unity0extstorage.dfs.core.windows.net/'
-
-# COMMAND ----------
-
-
